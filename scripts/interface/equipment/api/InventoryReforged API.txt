@@ -1,0 +1,94 @@
+For mod authors
+API version 1. This part of the readme is the whole API, nothing else of the mod belongs to it.
+
+In short
+  Open someone's inventory the game's way and the panel shows them instead of the player:
+    akActor.OpenInventory(true)
+  That's the container menu in its NPC mode, the one of a follower's "Let's trade some things". A follower
+  framework that opens a follower's inventory this way gets the panel with no code at all: their doll, what they
+  wear in the slots, and what the player drags into a slot goes on them. The calls below are for a mod that wants
+  to know what the player changed, or to keep the panel's hands off an actor for a while.
+
+Who gets the panel
+  A living actor whose race has the ActorTypeNPC keyword, enabled, loaded in the world, with their AI on, a
+  teammate or not. Everyone else gets the plain container menu: creatures, the dead, the
+  disabled, someone in an unloaded cell (a "remote" inventory), mannequins and posed statues (AI off), a chest
+  standing in for someone, the gift menu (ShowGiftMenu) and shops. ShowsPanelFor tells it before
+  you open the trade. The player can switch it off ("Panel in a follower's trade", [Panel] bFollowers).
+
+What the panel does to the actor
+  Pieces of their default outfit stand in the slots too, though the game keeps them out of the trade's rows. A
+  piece of it they carry and don't wear loses the outfit mark (ExtraOutfitItem) as their trade opens, or as the
+  panel takes it off or puts another piece in its place: from then on it's an ordinary item of theirs with its own
+  row, and the game adds no second set of that outfit when it re-dresses them. Pieces of a sleep outfit keep it.
+  A row of the player's side dropped into a slot is given first through the menu's own move, so the game
+  checks it as any gift, then it goes on. A trade closed in that moment keeps the gift and puts nothing on.
+  The panel equips with the flags of EquipItem(akItem, abPreventRemoval = false) and unequips with those of
+  UnequipItem(akItem, abPreventEquip = true). What stood in the place of a new piece comes off first.
+  While "Followers keep what you give" ([Panel] bKeepChoices) is on, the player's choice holds: the actor's combat
+  AI doesn't pick a rival of a chosen piece, the game's own re-dress when their inventory changes, on a cell
+  change or a load puts nothing over it, and a change by anyone else goes back after a second. A script that
+  changes the same piece back three times in ten minutes keeps that piece, the rest of the choice holds. Off, the
+  game dresses them its own way. SetReadOnly keeps all of it off an actor.
+
+Papyrus: script InventoryReforged, all global
+  The source is Source/Scripts/InventoryReforged.psc. Compile against it, never pack InventoryReforged.pex in
+  your mod: an older copy would win over the mod's newer one. The functions at its top are the mod's own menu.
+
+  Int GetApiVersion()                       1 now
+  Actor GetPanelActor()                     who the panel shows now: the player in the inventory, the actor in
+                                            their trade. None with no panel up, and already in OnMenuClose
+  Bool ShowsPanelFor(Actor akActor)         whether OpenInventory on this actor would show the panel now
+  SetReadOnly(Actor akActor, Bool abReadOnly)
+                                            True: the panel shows the actor in their trade but puts nothing on
+                                            and takes nothing off; giving and taking items stays the game's. For a
+                                            quest's disguise or while your script switches their gear. At once,
+                                            also in a trade already open. Kept in the save until set back to False.
+                                            The player is never read only. Up to 256 actors. The mod's menu has a
+                                            button that clears all of them, for a mod that's gone
+  RegisterForWear(Form akReceiver)
+  UnregisterForWear(Form akReceiver)        the script on akReceiver gets the two events below for every actor.
+                                            Twice is once. Kept in the save. Register one quest or a few forms,
+                                            never every actor: 16 per plugin file, and the forms made while the
+                                            game runs share one place of 16 among all mods
+
+  Events, written as Functions (Caprica refuses Events of names the game doesn't know, the game calls these
+  the same way):
+    Function OnInventoryReforgedWear(Actor akWearer, Form akItem, Bool abOn)
+      The player put a piece on someone through the panel (abOn true) or took one off (false), after the game
+      did it. A piece pushed off for a new one comes as taken off, before the new one. A piece the game refused
+      never comes, nor does what the AI or a script equips. The player's own inventory sends nothing.
+    Function OnInventoryReforgedDone(Actor akWearer, Bool abChanged)
+      The trade with the panel closed, after its last OnInventoryReforgedWear. abChanged when any came. The
+      place to save a set of gear once.
+  The actor's own OnObjectEquipped comes before the panel's event of the same piece. Each event runs as its own
+  Papyrus call: two may interleave when a handler calls something that waits.
+
+  A whole listener, on a quest of your mod:
+    Scriptname MyFollowerGear extends Quest
+    Event OnInit()
+      If SKSE.GetPluginVersion("InventoryReforged") > 0
+        InventoryReforged.RegisterForWear(self)
+      EndIf
+    EndEvent
+    Function OnInventoryReforgedWear(Actor akWearer, Form akItem, Bool abOn)
+      ; a ReferenceAlias isn't a Form, find the alias that holds akWearer here and hand the event on
+    EndFunction
+    Function OnInventoryReforgedDone(Actor akWearer, Bool abChanged)
+      If abChanged
+        ; save akWearer's gear set
+      EndIf
+    EndFunction
+  A quest of a mod already running when Inventory Reforged is installed has had its OnInit: register again from
+  OnPlayerLoadGame of a ReferenceAlias on the player, that's harmless.
+
+What stays the same
+  The functions and events above with their names, arguments and meaning, and the behaviour described here.
+  A later version adds and raises the version number, it takes nothing away. Anything else of the mod is not
+  part of the API.
+
+Good to know
+  Numbers in the list, the item window and the arrows of rows are the game's numbers for the player, on the
+  actor's rows too: a rough guide for them.
+  A script's equip of the actor during their trade shows at once on the doll and in the slots, except on one
+  riding, sitting, knocked down or bleeding out: their doll waits for the game's own update.

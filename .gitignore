@@ -1,0 +1,6 @@
+build/
+out/
+tools/
+game-run/
+__pycache__/
+*.pyc
